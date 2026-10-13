@@ -283,6 +283,7 @@ struct VulkanDevice::State {
     VkPhysicalDeviceDescriptorIndexingPropertiesEXT descriptorIndexingProperties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES_EXT};
     bool imageInt64Atomics = false;
     bool bufferInt64Atomics = false;
+    bool viewportIndexLayer = false;
     bool primitiveListRestart = false;
     bool depthClipControl = false;
     bool graphicsPipelineLibrary = false;
@@ -1148,6 +1149,12 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
         state->capabilities.push_back(spv::CapabilityInt64ImageEXT);
         state->imageInt64Atomics = true;
         state->spirvExtensions.push_back("SPV_EXT_shader_image_int64");
+    }
+    if (hasExtension(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME)) {
+        deviceExtensions.push_back(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME);
+        state->capabilities.push_back(spv::CapabilityShaderViewportIndexLayerEXT);
+        state->spirvExtensions.push_back("SPV_EXT_shader_viewport_index_layer");
+        state->viewportIndexLayer = true;
     }
     deviceExtensions.push_back(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
     state->capabilities.push_back(spv::CapabilitySignedZeroInfNanPreserve);
@@ -2165,7 +2172,7 @@ VulkanDevice::CopyOutcome VulkanDevice::CopyBuffer(std::uint64_t destination, st
     // a completion-deferred label): it lands only when that batch is reaped, whatever its fence.
     const auto completionStoreOverlaps = [&](std::uint64_t address) {
         if (alwaysSync || state->CopiedWriterOverlaps(address, bytes)) return true;
-        return Graphics::Recorder::PendingCompletionLabels() != 0 && recorder.PendingLabelIn(address, bytes);
+        return Graphics::Recorder::PendingCompletionLabels() != 0 && recorder.CompletionLabelIn(address, bytes);
     };
     // The CPU decision (see the header): pure queries, in the order that makes the first failing
     // test the reason; a signaled writer of the source is fine (its in-place stores are final in
@@ -3136,6 +3143,7 @@ Graphics::Context VulkanDevice::buildContext() const {
     context.nullDescriptors = state->shaderProfile != nullptr && state->shaderProfile->NullDescriptors();
     context.bufferInt64Atomics = state->bufferInt64Atomics;
     context.placeholderImages = state->placeholderImages.get();
+    context.viewportIndexLayer = state->viewportIndexLayer;
     context.primitiveListRestart = state->primitiveListRestart;
     context.imageViewMinLod = state->imageViewMinLod;
     context.pipelineExecutableInfo = state->pipelineExecutableInfo;
